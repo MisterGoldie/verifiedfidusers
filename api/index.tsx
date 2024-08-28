@@ -54,7 +54,7 @@ async function getGoldiesUsdPrice(): Promise<number> {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json()
-    console.log('Uniswap API response:', JSON.stringify(data, null, 2))
+    console.log('DEX Screener API response:', JSON.stringify(data, null, 2))
 
     if (data.pair && data.pair.priceUsd) {
       const priceUsd = parseFloat(data.pair.priceUsd)
@@ -71,19 +71,37 @@ async function getGoldiesUsdPrice(): Promise<number> {
 }
 
 async function getConnectedAddress(fid: number): Promise<string | null> {
+  console.log(`Attempting to fetch connected address for FID: ${fid}`);
   try {
     const response = await fetch(`${NEYNAR_API_URL}/user?fid=${fid}`, {
       headers: {
         'api_key': NEYNAR_API_KEY
       }
     });
+    
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+    
     const data = await response.json();
-    return data.result.user.custody_address || null;
+    console.log('Neynar API response:', JSON.stringify(data, null, 2));
+    
+    if (!data.result?.user?.custody_address) {
+      console.error('Custody address not found in Neynar API response');
+      return null;
+    }
+    
+    console.log(`Connected Ethereum address for FID ${fid}:`, data.result.user.custody_address);
+    return data.result.user.custody_address;
   } catch (error) {
-    console.error('Error fetching connected address:', error);
+    console.error('Error in getConnectedAddress:', error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
     return null;
   }
 }
@@ -128,12 +146,11 @@ app.frame('/', (c) => {
 
 app.frame('/check', async (c) => {
   const { fid } = c.frameData || {}
-  const { displayName, pfpUrl, verifiedAddresses } = c.var.interactor || {}
+  const { displayName, pfpUrl } = c.var.interactor || {}
 
   console.log('FID:', fid)
   console.log('Display Name:', displayName)
   console.log('Profile Picture URL:', pfpUrl)
-  console.log('verified addresses:',verifiedAddresses)
 
   if (!fid) {
     return c.res({
@@ -150,14 +167,14 @@ app.frame('/check', async (c) => {
   }
 
   try {
-    const verifiededAddresses = await getConnectedAddress(fid);
-    if (!verifiededAddresses) {
+    const connectedAddress = await getConnectedAddress(fid);
+    if (!connectedAddress) {
       throw new Error('Unable to fetch connected Ethereum address');
     }
-    console.log('Connected Ethereum address:', verifiededAddresses);
+    console.log('Connected Ethereum address:', connectedAddress);
 
-    console.log('Fetching balance and price for address:', verifiededAddresses)
-    const balance = await getGoldiesBalance(verifiededAddresses)
+    console.log('Fetching balance and price for address:', connectedAddress)
+    const balance = await getGoldiesBalance(connectedAddress)
     let priceUsd: number | null = null
     let priceError: string | null = null
 
@@ -176,7 +193,7 @@ app.frame('/check', async (c) => {
     } else if (!balance.startsWith('Error')) {
       const balanceNumber = parseFloat(balance)
       balanceDisplay = `${balanceNumber.toLocaleString()} $GOLDIES on Polygon`
-      
+
       if (priceUsd !== null) {
         const usdValue = balanceNumber * priceUsd
         console.log('Calculated USD value:', usdValue)
@@ -209,7 +226,7 @@ app.frame('/check', async (c) => {
           </div>
           <p style={{ fontSize: '42px', textAlign: 'center' }}>{balanceDisplay}</p>
           <p style={{ fontSize: '42px', textAlign: 'center' }}>{usdValueDisplay}</p>
-          <p style={{ fontSize: '32px', marginTop: '20px', textAlign: 'center' }}>Address: {verifiededAddresses}</p>
+          <p style={{ fontSize: '32px', marginTop: '20px', textAlign: 'center' }}>Address: {connectedAddress}</p>
           <p style={{ fontSize: '32px', marginTop: '10px', textAlign: 'center' }}>Network: Polygon (Chain ID: {POLYGON_CHAIN_ID})</p>
           {priceUsd !== null && <p style={{ fontSize: '26px', marginTop: '10px', textAlign: 'center' }}>Price: ${priceUsd.toFixed(8)} USD</p>}
         </div>
