@@ -15,7 +15,7 @@ const GOLDIES_TOKEN_ADDRESS = '0x3150E01c36ad3Af80bA16C1836eFCD967E96776e'
 const ALCHEMY_POLYGON_URL = 'https://polygon-mainnet.g.alchemy.com/v2/pe-VGWmYoLZ0RjSXwviVMNIDLGwgfkao'
 const POLYGON_CHAIN_ID = 137
 const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql';
-const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'; 
+const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'; // Replace with your actual Airstack API key
 
 const ABI = [
   'function balanceOf(address account) view returns (uint256)',
@@ -77,16 +77,10 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
         query: `
           query ConnectWalletWithFID($fid: String!) {
             Socials(
-              input: {filter: {userId: {_eq: $fid}, profileName: {}}, blockchain: ethereum}
+              input: {filter: {userId: {_eq: $fid}, dappName: {_eq: farcaster}}, blockchain: ethereum}
             ) {
               Social {
-                dappName
-                profileName
-                userAddress
-                connectedAddresses {
-                  address
-                  blockchain
-                }
+                userAssociatedAddresses
               }
             }
           }
@@ -104,27 +98,26 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
     }
     
     const data = await response.json();
-    console.log('Airstack API response:', JSON.stringify(data, null, 2));
+    console.log('Airstack API full response:', JSON.stringify(data, null, 2));
     
     if (data.data?.Socials?.Social && data.data.Socials.Social.length > 0) {
-      const social = data.data.Socials.Social[0];
-      if (social.connectedAddresses && social.connectedAddresses.length > 0) {
-        const polygonAddress = social.connectedAddresses.find((addr: { blockchain: string; address: string }) => addr.blockchain.toLowerCase() === 'polygon');
+      const addresses = data.data.Socials.Social[0].userAssociatedAddresses;
+      console.log('User associated addresses:', addresses);
+      
+      if (addresses && addresses.length > 0) {
+        // Prioritize Polygon addresses if available
+        const polygonAddress = addresses.find((addr: string) => addr.startsWith('0x'));
         if (polygonAddress) {
-          console.log(`Found Polygon address for FID ${fid}:`, polygonAddress.address);
-          return polygonAddress.address;
+          console.log(`Found address for FID ${fid}:`, polygonAddress);
+          return polygonAddress;
         }
-      }
-      if (social.userAddress) {
-        console.log(`Found user address for FID ${fid}:`, social.userAddress);
-        return social.userAddress;
       }
     }
     
-    console.error('No connected Ethereum address found for the user');
+    console.error('No connected address found for the user');
     return null;
   } catch (error) {
-    console.error('Error in getConnectedAddress:', error);
+    console.error('Detailed error in getConnectedAddress:', error);
     if (error instanceof Error) {
       console.error('Error name:', error.name);
       console.error('Error message:', error.message);
@@ -175,9 +168,11 @@ app.frame('/', (c) => {
 app.frame('/check', async (c) => {
   const { fid } = c.frameData || {}
 
-  console.log('FID:', fid)
+  console.log('Full frameData:', JSON.stringify(c.frameData, null, 2));
+  console.log('FID:', fid);
 
   if (!fid) {
+    console.error('No FID found in frameData');
     return c.res({
       image: (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#FF8B19', padding: '20px', boxSizing: 'border-box' }}>
@@ -192,8 +187,10 @@ app.frame('/check', async (c) => {
   }
 
   try {
+    console.log('Attempting to get connected address...');
     const connectedAddress = await getConnectedAddress(fid);
     if (!connectedAddress) {
+      console.error('Failed to fetch connected address for FID:', fid);
       throw new Error('No connected Ethereum or Polygon address found for your Farcaster account');
     }
     console.log('Connected address:', connectedAddress);
@@ -250,7 +247,12 @@ app.frame('/check', async (c) => {
       ]
     })
   } catch (error) {
-    console.error('Error in balance check:', error)
+    console.error('Detailed error in balance check:', error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred'
     return c.res({
       image: (
