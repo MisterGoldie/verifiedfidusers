@@ -22,6 +22,7 @@ const ALCHEMY_POLYGON_URL = 'https://polygon-mainnet.g.alchemy.com/v2/pe-VGWmYoL
 const POLYGON_CHAIN_ID = 137
 const NEYNAR_API_URL = 'https://api.neynar.com/v2/farcaster'
 const NEYNAR_API_KEY = 'NEYNAR_FROG_FM'
+const ALCHEMY_MAINNET_URL = 'https://eth-mainnet.g.alchemy.com/v2/pe-VGWmYoLZ0RjSXwviVMNIDLGwgfkao'
 
 const ABI = [
   'function balanceOf(address account) view returns (uint256)',
@@ -48,8 +49,8 @@ async function getGoldiesBalance(address: string): Promise<string> {
 
 async function getGoldiesUsdPrice(): Promise<number> {
   try {
-    console.log('Fetching $GOLDIES price from Uniswap...')
-    const response = await fetch('https://app.uniswap.org/explore/tokens/polygon/0x3150e01c36ad3af80ba16c1836efcd967e96776e')
+    console.log('Fetching $GOLDIES price from DEX Screener...')
+    const response = await fetch('https://api.dexscreener.com/latest/dex/pairs/polygon/0x19976577bb2fa3174b4ae4cf55e6795dde730135')
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -61,7 +62,8 @@ async function getGoldiesUsdPrice(): Promise<number> {
       console.log('Fetched $GOLDIES price in USD:', priceUsd)
       return priceUsd
     } else {
-      throw new Error('Invalid price data received from Uniswap')
+      console.error('Invalid or missing price data in DEX Screener response:', data)
+      throw new Error('Invalid price data received from DEX Screener')
     }
   } catch (error) {
     console.error('Error in getGoldiesUsdPrice:', error)
@@ -127,7 +129,7 @@ app.frame('/', (c) => {
 
 app.frame('/check', async (c) => {
   const { fid } = c.frameData || {}
-  const { displayName, pfpUrl,verifiedAddresses } = c.var.interactor || {}
+  const { displayName, pfpUrl, verifiedAddresses } = c.var.interactor || {}
 
   console.log('FID:', fid)
   console.log('Display Name:', displayName)
