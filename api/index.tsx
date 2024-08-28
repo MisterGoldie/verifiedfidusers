@@ -61,7 +61,7 @@ async function getGoldiesUsdPrice(): Promise<number> {
       console.log('Fetched $GOLDIES price in USD:', priceUsd)
       return priceUsd
     } else {
-      throw new Error('Invalid price data received from DEX Uniswap')
+      throw new Error('Invalid price data received from Uniswap')
     }
   } catch (error) {
     console.error('Error in getGoldiesUsdPrice:', error)
