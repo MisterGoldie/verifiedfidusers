@@ -127,11 +127,12 @@ app.frame('/', (c) => {
 
 app.frame('/check', async (c) => {
   const { fid } = c.frameData || {}
-  const { displayName, pfpUrl } = c.var.interactor || {}
+  const { displayName, pfpUrl,verifiedAddresses } = c.var.interactor || {}
 
   console.log('FID:', fid)
   console.log('Display Name:', displayName)
   console.log('Profile Picture URL:', pfpUrl)
+  console.log('verified addresses:',verifiedAddresses)
 
   if (!fid) {
     return c.res({
