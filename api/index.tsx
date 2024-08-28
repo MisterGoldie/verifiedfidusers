@@ -71,9 +71,9 @@ async function getGoldiesUsdPrice(): Promise<number> {
 }
 
 async function getConnectedAddress(fid: number): Promise<string | null> {
-  console.log(`Attempting to fetch connected address for FID: ${fid}`);
+  console.log(`Attempting to fetch verified addresses for FID: ${fid}`);
   try {
-    const response = await fetch(`${NEYNAR_API_URL}/user?fid=${fid}`, {
+    const response = await fetch(`${NEYNAR_API_URL}/user/bulk?fids=${fid}`, {
       headers: {
         'api_key': NEYNAR_API_KEY
       }
@@ -88,13 +88,21 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
     const data = await response.json();
     console.log('Neynar API response:', JSON.stringify(data, null, 2));
     
-    if (!data.result?.user?.custody_address) {
-      console.error('Custody address not found in Neynar API response');
+    if (!data.users || data.users.length === 0) {
+      console.error('No user data found in Neynar API response');
+      return null;
+    }
+
+    const user = data.users[0];
+    const verifiedAddresses = user.verifications || [];
+    
+    if (verifiedAddresses.length === 0) {
+      console.error('No verified Ethereum addresses found for the user');
       return null;
     }
     
-    console.log(`Connected Ethereum address for FID ${fid}:`, data.result.user.custody_address);
-    return data.result.user.custody_address;
+    console.log(`Verified Ethereum addresses for FID ${fid}:`, verifiedAddresses);
+    return verifiedAddresses[0]; // Return the first verified address
   } catch (error) {
     console.error('Error in getConnectedAddress:', error);
     if (error instanceof Error) {
@@ -169,7 +177,7 @@ app.frame('/check', async (c) => {
   try {
     const connectedAddress = await getConnectedAddress(fid);
     if (!connectedAddress) {
-      throw new Error('Unable to fetch connected Ethereum address');
+      throw new Error('No verified Ethereum address found for your Farcaster account');
     }
     console.log('Connected Ethereum address:', connectedAddress);
 
@@ -244,8 +252,9 @@ app.frame('/check', async (c) => {
       image: (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#FF8B19', padding: '20px', boxSizing: 'border-box' }}>
           <h1 style={{ fontSize: '48px', marginBottom: '20px', textAlign: 'center' }}>Error</h1>
-          <p style={{ fontSize: '36px', textAlign: 'center' }}>Unable to fetch balance or price. Please try again.</p>
+          <p style={{ fontSize: '36px', textAlign: 'center' }}>Unable to fetch balance or price.</p>
           <p style={{ fontSize: '24px', textAlign: 'center' }}>Error details: {errorMessage}</p>
+          <p style={{ fontSize: '18px', textAlign: 'center', marginTop: '20px' }}>Please ensure you have a verified Ethereum address linked to your Farcaster account.</p>
         </div>
       ),
       intents: [
