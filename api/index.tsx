@@ -151,14 +151,14 @@ app.frame('/check', async (c) => {
   }
 
   try {
-    const connectedAddress = await getConnectedAddress(fid);
-    if (!connectedAddress) {
+    const verifiededAddresses = await getConnectedAddress(fid);
+    if (!verifiededAddresses) {
       throw new Error('Unable to fetch connected Ethereum address');
     }
-    console.log('Connected Ethereum address:', connectedAddress);
+    console.log('Connected Ethereum address:', verifiededAddresses);
 
-    console.log('Fetching balance and price for address:', connectedAddress)
-    const balance = await getGoldiesBalance(connectedAddress)
+    console.log('Fetching balance and price for address:', verifiededAddresses)
+    const balance = await getGoldiesBalance(verifiededAddresses)
     let priceUsd: number | null = null
     let priceError: string | null = null
 
@@ -210,7 +210,7 @@ app.frame('/check', async (c) => {
           </div>
           <p style={{ fontSize: '42px', textAlign: 'center' }}>{balanceDisplay}</p>
           <p style={{ fontSize: '42px', textAlign: 'center' }}>{usdValueDisplay}</p>
-          <p style={{ fontSize: '32px', marginTop: '20px', textAlign: 'center' }}>Address: {connectedAddress}</p>
+          <p style={{ fontSize: '32px', marginTop: '20px', textAlign: 'center' }}>Address: {verifiededAddresses}</p>
           <p style={{ fontSize: '32px', marginTop: '10px', textAlign: 'center' }}>Network: Polygon (Chain ID: {POLYGON_CHAIN_ID})</p>
           {priceUsd !== null && <p style={{ fontSize: '26px', marginTop: '10px', textAlign: 'center' }}>Price: ${priceUsd.toFixed(8)} USD</p>}
         </div>
