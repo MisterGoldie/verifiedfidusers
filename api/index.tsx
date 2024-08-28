@@ -2,7 +2,6 @@ import { Button, Frog } from 'frog'
 import { handle } from 'frog/vercel'
 import { ethers } from 'ethers'
 import fetch from 'node-fetch'
-import { neynar } from 'frog/middlewares'
 import { pinata } from 'frog/hubs'
 
 export const app = new Frog({
@@ -10,18 +9,13 @@ export const app = new Frog({
   imageOptions: { width: 1200, height: 630 },
   title: '$GOLDIES Token Tracker on Polygon',
   hub: pinata(),
-}).use(
-  neynar({
-    apiKey: 'NEYNAR_FROG_FM',
-    features: ['interactor', 'cast'],
-  })
-)
+})
 
 const GOLDIES_TOKEN_ADDRESS = '0x3150E01c36ad3Af80bA16C1836eFCD967E96776e'
 const ALCHEMY_POLYGON_URL = 'https://polygon-mainnet.g.alchemy.com/v2/pe-VGWmYoLZ0RjSXwviVMNIDLGwgfkao'
 const POLYGON_CHAIN_ID = 137
-const NEYNAR_API_URL = 'https://api.neynar.com/v2/farcaster'
-const NEYNAR_API_KEY = 'NEYNAR_FROG_FM'
+const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql';
+const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'; 
 
 const ABI = [
   'function balanceOf(address account) view returns (uint256)',
@@ -71,12 +65,36 @@ async function getGoldiesUsdPrice(): Promise<number> {
 }
 
 async function getConnectedAddress(fid: number): Promise<string | null> {
-  console.log(`Attempting to fetch verified addresses for FID: ${fid}`);
+  console.log(`Attempting to fetch connected address for FID: ${fid}`);
   try {
-    const response = await fetch(`${NEYNAR_API_URL}/user/bulk?fids=${fid}`, {
+    const response = await fetch(AIRSTACK_API_URL, {
+      method: 'POST',
       headers: {
-        'api_key': NEYNAR_API_KEY
-      }
+        'Content-Type': 'application/json',
+        'Authorization': AIRSTACK_API_KEY
+      },
+      body: JSON.stringify({
+        query: `
+          query ConnectWalletWithFID($fid: String!) {
+            Socials(
+              input: {filter: {userId: {_eq: $fid}, profileName: {}}, blockchain: ethereum}
+            ) {
+              Social {
+                dappName
+                profileName
+                userAddress
+                connectedAddresses {
+                  address
+                  blockchain
+                }
+              }
+            }
+          }
+        `,
+        variables: {
+          fid: fid.toString()
+        }
+      })
     });
     
     if (!response.ok) {
@@ -86,23 +104,25 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
     }
     
     const data = await response.json();
-    console.log('Neynar API response:', JSON.stringify(data, null, 2));
+    console.log('Airstack API response:', JSON.stringify(data, null, 2));
     
-    if (!data.users || data.users.length === 0) {
-      console.error('No user data found in Neynar API response');
-      return null;
+    if (data.data?.Socials?.Social && data.data.Socials.Social.length > 0) {
+      const social = data.data.Socials.Social[0];
+      if (social.connectedAddresses && social.connectedAddresses.length > 0) {
+        const polygonAddress = social.connectedAddresses.find((addr: { blockchain: string; address: string }) => addr.blockchain.toLowerCase() === 'polygon');
+        if (polygonAddress) {
+          console.log(`Found Polygon address for FID ${fid}:`, polygonAddress.address);
+          return polygonAddress.address;
+        }
+      }
+      if (social.userAddress) {
+        console.log(`Found user address for FID ${fid}:`, social.userAddress);
+        return social.userAddress;
+      }
     }
-
-    const user = data.users[0];
-    const verifiedAddresses = user.verifications || [];
     
-    if (verifiedAddresses.length === 0) {
-      console.error('No verified Ethereum addresses found for the user');
-      return null;
-    }
-    
-    console.log(`Verified Ethereum addresses for FID ${fid}:`, verifiedAddresses);
-    return verifiedAddresses[0]; // Return the first verified address
+    console.error('No connected Ethereum address found for the user');
+    return null;
   } catch (error) {
     console.error('Error in getConnectedAddress:', error);
     if (error instanceof Error) {
@@ -154,11 +174,8 @@ app.frame('/', (c) => {
 
 app.frame('/check', async (c) => {
   const { fid } = c.frameData || {}
-  const { displayName, pfpUrl } = c.var.interactor || {}
 
   console.log('FID:', fid)
-  console.log('Display Name:', displayName)
-  console.log('Profile Picture URL:', pfpUrl)
 
   if (!fid) {
     return c.res({
@@ -177,9 +194,9 @@ app.frame('/check', async (c) => {
   try {
     const connectedAddress = await getConnectedAddress(fid);
     if (!connectedAddress) {
-      throw new Error('No verified Ethereum address found for your Farcaster account');
+      throw new Error('No connected Ethereum or Polygon address found for your Farcaster account');
     }
-    console.log('Connected Ethereum address:', connectedAddress);
+    console.log('Connected address:', connectedAddress);
 
     console.log('Fetching balance and price for address:', connectedAddress)
     const balance = await getGoldiesBalance(connectedAddress)
@@ -218,20 +235,7 @@ app.frame('/check', async (c) => {
       image: (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#FF8B19', padding: '20px', boxSizing: 'border-box' }}>
           <h1 style={{ fontSize: '60px', marginBottom: '20px', textAlign: 'center' }}>Your $GOLDIES Balance</h1>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-            {pfpUrl ? (
-              <img 
-                src={pfpUrl} 
-                alt="Profile" 
-                style={{ width: '64px', height: '64px', borderRadius: '50%', marginRight: '10px' }}
-              />
-            ) : (
-              <div style={{ width: '64px', height: '64px', borderRadius: '50%', marginRight: '10px', backgroundColor: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {displayName ? displayName.charAt(0).toUpperCase() : 'U'}
-              </div>
-            )}
-            <p style={{ fontSize: '32px', textAlign: 'center' }}>{displayName || `FID: ${fid}`}</p>
-          </div>
+          <p style={{ fontSize: '32px', textAlign: 'center' }}>FID: {fid}</p>
           <p style={{ fontSize: '42px', textAlign: 'center' }}>{balanceDisplay}</p>
           <p style={{ fontSize: '42px', textAlign: 'center' }}>{usdValueDisplay}</p>
           <p style={{ fontSize: '32px', marginTop: '20px', textAlign: 'center' }}>Address: {connectedAddress}</p>
@@ -254,7 +258,7 @@ app.frame('/check', async (c) => {
           <h1 style={{ fontSize: '48px', marginBottom: '20px', textAlign: 'center' }}>Error</h1>
           <p style={{ fontSize: '36px', textAlign: 'center' }}>Unable to fetch balance or price.</p>
           <p style={{ fontSize: '24px', textAlign: 'center' }}>Error details: {errorMessage}</p>
-          <p style={{ fontSize: '18px', textAlign: 'center', marginTop: '20px' }}>Please ensure you have a verified Ethereum address linked to your Farcaster account.</p>
+          <p style={{ fontSize: '18px', textAlign: 'center', marginTop: '20px' }}>Please ensure you have a connected Ethereum or Polygon address linked to your Farcaster account.</p>
         </div>
       ),
       intents: [
