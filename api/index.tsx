@@ -1,6 +1,5 @@
 import { Button, Frog } from 'frog'
 import { handle } from 'frog/vercel'
-import { ethers } from 'ethers'
 import fetch from 'node-fetch'
 import { pinata } from 'frog/hubs'
 
@@ -12,31 +11,67 @@ export const app = new Frog({
 })
 
 const GOLDIES_TOKEN_ADDRESS = '0x3150E01c36ad3Af80bA16C1836eFCD967E96776e'
-const ALCHEMY_POLYGON_URL = 'https://polygon-mainnet.g.alchemy.com/v2/pe-VGWmYoLZ0RjSXwviVMNIDLGwgfkao'
 const POLYGON_CHAIN_ID = 137
 const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql';
 const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'; // Replace with your actual Airstack API key
 
-const ABI = [
-  'function balanceOf(address account) view returns (uint256)',
-  'function decimals() view returns (uint8)',
-]
-
 async function getGoldiesBalance(address: string): Promise<string> {
+  console.log('Fetching balance for address:', address)
   try {
-    console.log('Fetching balance for address:', address)
-    const provider = new ethers.JsonRpcProvider(ALCHEMY_POLYGON_URL, POLYGON_CHAIN_ID)
-    const contract = new ethers.Contract(GOLDIES_TOKEN_ADDRESS, ABI, provider)
+    const response = await fetch(AIRSTACK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': AIRSTACK_API_KEY
+      },
+      body: JSON.stringify({
+        query: `
+          query GetGoldiesBalance($ownerAddress: Identity!) {
+            TokenBalances(
+              input: {
+                filter: {
+                  tokenAddress: {_eq: "${GOLDIES_TOKEN_ADDRESS}"},
+                  owner: {_eq: $ownerAddress}
+                },
+                blockchain: polygon
+              }
+            ) {
+              TokenBalance {
+                amount
+                formattedAmount
+              }
+            }
+          }
+        `,
+        variables: {
+          ownerAddress: address
+        }
+      })
+    });
 
-    const balance = await contract.balanceOf(address)
-    const decimals = await contract.decimals()
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-    const formattedBalance = ethers.formatUnits(balance, decimals)
-    console.log('Fetched balance:', formattedBalance)
-    return formattedBalance
+    const data = await response.json();
+    console.log('Airstack API response for balance:', JSON.stringify(data, null, 2));
+
+    if (data.data?.TokenBalances?.TokenBalance && data.data.TokenBalances.TokenBalance.length > 0) {
+      const balance = data.data.TokenBalances.TokenBalance[0].formattedAmount;
+      console.log('Fetched $GOLDIES balance:', balance);
+      return balance;
+    } else {
+      console.log('No $GOLDIES balance found for the address');
+      return "0";
+    }
   } catch (error) {
-    console.error('Error in getGoldiesBalance:', error)
-    return 'Error: Unable to fetch balance'
+    console.error('Error in getGoldiesBalance:', error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    return 'Error: Unable to fetch balance';
   }
 }
 
@@ -98,7 +133,7 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
     }
     
     const data = await response.json();
-    console.log('Airstack API full response:', JSON.stringify(data, null, 2));
+    console.log('Airstack API full response for connected address:', JSON.stringify(data, null, 2));
     
     if (data.data?.Socials?.Social && data.data.Socials.Social.length > 0) {
       const addresses = data.data.Socials.Social[0].userAssociatedAddresses;
@@ -210,7 +245,7 @@ app.frame('/check', async (c) => {
     let balanceDisplay = ''
     let usdValueDisplay = ''
 
-    if (balance === '0.00') {
+    if (balance === '0') {
       balanceDisplay = "You don't have any $GOLDIES tokens on Polygon yet!"
     } else if (!balance.startsWith('Error')) {
       const balanceNumber = parseFloat(balance)
