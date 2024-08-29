@@ -13,7 +13,7 @@ export const app = new Frog({
 const GOLDIES_TOKEN_ADDRESS = '0x3150E01c36ad3Af80bA16C1836eFCD967E96776e'
 const POLYGON_CHAIN_ID = 137
 const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql';
-const AIRSTACK_API_KEY = 'YOUR_AIRSTACK_API_KEY'; // Replace with your actual Airstack API key
+const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'; // Replace with your actual Airstack API key
 
 async function getGoldiesBalance(address: string): Promise<string> {
   console.log('Fetching balance for address:', address)
