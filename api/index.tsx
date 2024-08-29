@@ -13,7 +13,7 @@ export const app = new Frog({
 const GOLDIES_TOKEN_ADDRESS = '0x3150E01c36ad3Af80bA16C1836eFCD967E96776e'
 const POLYGON_CHAIN_ID = 137
 const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql';
-const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'; // Replace with your actual Airstack API key
+const AIRSTACK_API_KEY = 'YOUR_AIRSTACK_API_KEY'; // Replace with your actual Airstack API key
 
 async function getGoldiesBalance(address: string): Promise<string> {
   console.log('Fetching balance for address:', address)
@@ -110,11 +110,32 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
       },
       body: JSON.stringify({
         query: `
-          query ConnectWalletWithFID($fid: String!) {
+          query GetFarcasterUser($fid: String!) {
             Socials(
-              input: {filter: {userId: {_eq: $fid}, dappName: {_eq: farcaster}}, blockchain: ethereum}
+              input: {filter: {dappName: {_eq: farcaster}, userId: {_eq: $fid}}}
             ) {
               Social {
+                userAssociatedAddresses
+                profileName
+                userId
+                userAddress
+                fnames
+              }
+            }
+            Wallet(input: {identity: $fid, blockchain: ethereum}) {
+              addresses
+              primaryDomain {
+                name
+              }
+              domains {
+                name
+              }
+              socials {
+                dappName
+                profileName
+                profileTokenId
+                profileTokenIdHex
+                userId
                 userAssociatedAddresses
               }
             }
@@ -135,18 +156,29 @@ async function getConnectedAddress(fid: number): Promise<string | null> {
     const data = await response.json();
     console.log('Airstack API full response for connected address:', JSON.stringify(data, null, 2));
     
+    let connectedAddress = null;
+
+    // Check Socials data
     if (data.data?.Socials?.Social && data.data.Socials.Social.length > 0) {
-      const addresses = data.data.Socials.Social[0].userAssociatedAddresses;
-      console.log('User associated addresses:', addresses);
-      
-      if (addresses && addresses.length > 0) {
-        // Prioritize Polygon addresses if available
-        const polygonAddress = addresses.find((addr: string) => addr.startsWith('0x'));
-        if (polygonAddress) {
-          console.log(`Found address for FID ${fid}:`, polygonAddress);
-          return polygonAddress;
-        }
+      const social = data.data.Socials.Social[0];
+      if (social.userAddress) {
+        connectedAddress = social.userAddress;
+      } else if (social.userAssociatedAddresses && social.userAssociatedAddresses.length > 0) {
+        connectedAddress = social.userAssociatedAddresses[0];
       }
+    }
+
+    // If not found in Socials, check Wallet data
+    if (!connectedAddress && data.data?.Wallet) {
+      const wallet = data.data.Wallet;
+      if (wallet.addresses && wallet.addresses.length > 0) {
+        connectedAddress = wallet.addresses[0];
+      }
+    }
+
+    if (connectedAddress) {
+      console.log(`Found address for FID ${fid}:`, connectedAddress);
+      return connectedAddress;
     }
     
     console.error('No connected address found for the user');
